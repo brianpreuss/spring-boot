@@ -16,6 +16,8 @@
 
 package org.springframework.boot.actuate.liquibase;
 
+import java.lang.reflect.Method;
+import java.sql.Connection;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
+import liquibase.Liquibase;
 import liquibase.changelog.ChangeLogHistoryService;
 import liquibase.changelog.ChangeSet.ExecType;
 import liquibase.changelog.RanChangeSet;
@@ -34,6 +37,7 @@ import liquibase.database.DatabaseFactory;
 import liquibase.database.jvm.JdbcConnection;
 import liquibase.integration.spring.SpringLiquibase;
 
+import org.springframework.boot.actuate.endpoint.annotation.DeleteOperation;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
 import org.springframework.context.ApplicationContext;
@@ -44,6 +48,7 @@ import org.springframework.util.StringUtils;
  * {@link Endpoint} to expose liquibase info.
  *
  * @author Eddú Meléndez
+ * @author Brian Preuß
  * @since 2.0.0
  */
 @Endpoint(id = "liquibase")
@@ -103,6 +108,20 @@ public class LiquibaseEndpoint {
 		catch (Exception ex) {
 			throw new IllegalStateException("Unable to get Liquibase change sets", ex);
 		}
+	}
+
+	@DeleteOperation
+	public void forceReleaseLocks(String name) {
+		SpringLiquibase springLiquibase = this.context.getBean(name, SpringLiquibase.class);
+		Connection connection = springLiquibase.getDataSource().getConnection();
+		Liquibase liquibase = createLiquibase(springLiquibase, connection);
+		liquibase.forceReleaseLocks();
+	}
+
+	private Liquibase createLiquibase(SpringLiquibase springLiquibase, Connection connection) {
+		Method createLiquibase = SpringLiquibase.class.getDeclaredMethod("createLiquibase", Connection.class);
+		createLiquibase.setAccessible(true);
+		return (Liquibase) createLiquibase.invoke(springLiquibase, connection);
 	}
 
 	/**
